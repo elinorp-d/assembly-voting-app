@@ -1,11 +1,10 @@
 
-import os
 import pandas as pd
 import numpy as np
 import streamlit as st
 
 # SETTING PAGE CONFIG TO WIDE MODE AND ADDING A TITLE AND FAVICON
-st.set_page_config(layout="wide", page_title="2025 IAP Student Assembly Voting Results", page_icon=":ballot_box:")
+st.set_page_config(layout="wide", page_title="2025 IAP Student Assembly Voting Results Day 2", page_icon=":ballot_box:")
 from plotly import graph_objects as go
 
 
@@ -26,83 +25,76 @@ with st.sidebar:
         ("Agreement", "Disagreement", "Pass", "Original Rec #"),
         key='sort_by')
     st.markdown("---")
-    with st.expander("Upload Data CSV Here:", expanded=True):
-        f = st.file_uploader("Data Upload", type="csv", key='recs', label_visibility='hidden')
+    with st.expander("Upload Data CSVs Here:", expanded=True):
+        f = st.file_uploader("Data Upload", type="csv", key='recs')
         if f:
             st.success("File uploaded successfully!")
-        # votes = data_upload(st.file_uploader("Upload votes csv", type="csv"))
+        ff = st.file_uploader("Rationales Upload", type="csv", key='rationales')
+        if ff:
+            st.success("File uploaded successfully!")
     
 
             
 @st.cache_data
-def recs_clean(recs, sort=None):
-    unique_authors_count = recs["author-id"].nunique()
+def recs_clean(recs):
+    unique_authors_count = recs["author-id"].nunique() -1
     st.write(f"Number of participants who voted: {unique_authors_count}")
     recs = recs[recs["moderated"]==1]
-    recs = recs[["comment-id","comment-body","agrees","disagrees"]]
-    recs['comment-id'] +=1
-    recs[['Recommendation', 'Rationale']] = recs['comment-body'].apply(lambda x: x.split('Rationale: ', 1) if 'Rationale: ' in x else [x, '']).apply(pd.Series)
-    recs["agrees"] -=1
+    cols_to_keep = ["comment-body","agrees","disagrees"]
+    if 'Rec #' in recs.columns:
+        cols_to_keep.append('Rec #')
+    if 'Rationale' in recs.columns:
+        cols_to_keep.append('Rationale')
+    recs = recs[cols_to_keep]
+    recs = recs.rename(columns={'comment-body': 'Recommendation'})
+
     recs["neutral/pass"] = unique_authors_count - recs["agrees"] - recs["disagrees"]
     recs["approval"] = (recs["agrees"]/unique_authors_count)*100
     recs["majority"] = recs['approval'].apply(lambda x: "✅" if x >= 75 else "❌")
-
-    if sort == 'Agreement':
-        recs = recs.sort_values(by="approval", ascending=False)
-    elif sort == 'Disagreement':
-        recs = recs.sort_values(by='disagrees', ascending=False)
-    elif sort == 'Pass':
-        recs = recs.sort_values(by='neutral/pass', ascending=False)
-    # recs_mapping = {row["comment-id"]:row["comment-body"] for _,row in recs.iterrows()}
-    return recs#, recs_mapping
+    if 'Rec #' in recs.columns:
+        recs['Rec #'] = recs['Rec #'].round().astype(int).astype(str)
+    return recs
 
 @st.cache_data
-def votes_clean(votes, _recs_ids):
-    # cols_to_drop = ["group-id","n-comments"]
-    # votes = votes.drop(columns=cols_to_drop, errors='ignore')
-    comment_ids = list(map(str, _recs_ids.keys()))
-    votes = votes[votes.columns.intersection(comment_ids)]
-    votes.columns = [f"Recommendation {col}" for col in votes.columns]
-    votes = votes.drop(index=0, errors='ignore')
-    return votes
+def rationales_merge(recs, rationales):
+    merged_df = recs.merge(rationales, on='Recommendation', how='left')
+    return merged_df
+
+def sort_recommendations(merged_df, sort_criteria):
+    if sort_criteria == 'Agreement':
+        merged_df = merged_df.sort_values(by="approval", ascending=False)
+    elif sort_criteria == 'Disagreement':
+        merged_df = merged_df.sort_values(by='disagrees', ascending=False)
+    elif sort_criteria == 'Pass':
+        merged_df = merged_df.sort_values(by='neutral/pass', ascending=False)
+    elif sort_criteria == 'Original Rec #':
+        if 'Rec #' in merged_df.columns:
+            merged_df = merged_df.sort_values(by='Rec #')
+    return merged_df
+
+
     
 def main_page():
-    st.title("2025 IAP Student Assembly Voting Overall Results")
+    st.title("2025 IAP Student Assembly Voting Overall Results Day 2")
     recs = data_load(st.session_state.recs)
+    # rationales = data_load(st.session_state.rationales)
     if recs is not None:
-        # recs, recs_mapping = recs_clean(recs, chosen)
-        recs = recs_clean(recs, chosen)
-        # st.dataframe(recs,
-        #             column_order=['comment-id','Recommendation','agrees','disagrees','neutral/pass','approval','majority'],
-        #             column_config={
-        #                 "comment-id": "Rec #",
-        #                 "Recommendation": "Recommendation",
-        #                 # "comment-body": "Recommendation",
-        #                 "approval":
-        #                     st.column_config.ProgressColumn(
-        #                         "% Approval",
-        #                         help="% of agree votes",
-        #                         format="%.2f %%",
-        #                         min_value=0,
-        #                         max_value=100,
-        #                 ),
-        #                     "majority":  "Majority?",
-        #             },
-        #             hide_index=True,
-        #             height=(len(recs) * 35) + 50)  # Adjust height based on number of rows
+        recs = recs_clean(recs)
+        # if rationales is not None:
+        #     recs = rationales_merge(recs,rationales)
+        recs = sort_recommendations(recs, chosen)
 
-        recs_formatted = recs[['comment-id', 'Recommendation', 'approval', 'majority']]
+        recs_formatted = recs[['Rec #','Recommendation', 'approval', 'majority']]
         recs_formatted = recs_formatted.rename(columns={
-            'comment-id': 'Rec #',
             'approval': '% Approval',
             'majority': 'Majority?'
         })
         
         # Format the approval column as a percentage
-        recs_formatted['% Approval'] = recs_formatted['% Approval'].apply(lambda x: f"{x:.2f}%")
-        # recs_formatted = recs_formatted.reset_index(drop=True)
-        
-                # Define a function to highlight cells
+        recs_formatted['% Approval'] = recs_formatted['% Approval'].apply(lambda x: f"{x:.2f}%") 
+        if 'Rec #' in recs_formatted.columns:
+            recs_formatted['Rec #'] = recs_formatted['Rec #'].round()
+
         def highlight_row(row):
             try:
                 # Remove the percentage sign and convert to float
@@ -131,7 +123,6 @@ def main_page():
         <</style>
         """
         st.markdown(hide_index_css,unsafe_allow_html=True)
-        # st.table(styled_recs)
         st.table(styled_recs.set_table_styles({
             ('',): [{'selector': 'table', 'props': [('class', 'custom-table')]}]
         }))
@@ -141,20 +132,27 @@ def main_page():
 def details_page():
     st.title("2025 IAP Student Assembly Detailed Results")
     recs = data_load(st.session_state.recs)
+    rationales = data_load(st.session_state.rationales)
     if recs is not None:
-        recs = recs_clean(recs, chosen)
+        recs = recs_clean(recs)
+        if rationales is not None:
+            recs = rationales_merge(recs,rationales)
+        recs = sort_recommendations(recs, chosen)
         for index, row in recs.iterrows():
             container = st.container()
             container.markdown("---")
             col1, col2 = container.columns(2)
-            col1.markdown(f"### Recommendation {row['comment-id']}")
+            if 'Rec #' in recs.columns:
+                col1.markdown(f"### Recommendation {row['Rec #']}")
+            else: 
+                col1.markdown("### Recommendation")
             
             # Print the recommendation text
             if row['Recommendation']:
                 col1.markdown(f"#### {row['Recommendation']}")
             else:
                 col1.markdown(f"#### {row['comment-body']}")
-            if row['Rationale']:
+            if 'Rationale' in recs.columns:
                 col1.markdown(f"*Rationale*: {row['Rationale']}")
             
             # Calculate the percentages for agree, disagree, and neutral/pass
@@ -175,13 +173,6 @@ def details_page():
     else:
         st.write("Please upload recommendations csv on the left!")
         
-
-# def votes_page():
-    # if votes is not None:
-    #     votes = votes_clean(votes, recs_mapping)
-    #     st.dataframe(votes)
-    #     st.dataframe(votes.style.highlight_max(axis=0))
-
 pages = {
     "Results": [
         st.Page(main_page, title="Overall Results"),
