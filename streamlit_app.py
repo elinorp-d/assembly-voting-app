@@ -4,7 +4,7 @@ import numpy as np
 import streamlit as st
 
 # SETTING PAGE CONFIG TO WIDE MODE AND ADDING A TITLE AND FAVICON
-st.set_page_config(layout="wide", page_title="2025 IAP Student Assembly Voting Results Day 2", page_icon=":ballot_box:")
+st.set_page_config(layout="wide", page_title="2025 IAP Student Assembly Voting Results Day 3", page_icon=":ballot_box:")
 from plotly import graph_objects as go
 
 
@@ -24,6 +24,17 @@ with st.sidebar:
         'Sort by:',
         ("Agreement", "Disagreement", "Pass", "Original Rec #"),
         key='sort_by')
+    passes = st.radio(
+        'Include passes when calculating majority?:',
+        ("Include", "Exclude"),
+        key='passes'
+    )
+    majority = st.select_slider(
+        'Select majority threshold:',
+        options=[75, 80, 85],
+        value=80,
+        key='majority_threshold'
+    )
     st.markdown("---")
     with st.expander("Upload Data CSVs Here:", expanded=True):
         f = st.file_uploader("Data Upload", type="csv", key='recs')
@@ -36,7 +47,7 @@ with st.sidebar:
 
             
 @st.cache_data
-def recs_clean(recs):
+def recs_clean(recs, pass_criteria, majority_threshold):
     unique_authors_count = recs["author-id"].nunique() -1
     st.write(f"Number of participants who voted: {unique_authors_count}")
     recs = recs[recs["moderated"]==1]
@@ -47,10 +58,13 @@ def recs_clean(recs):
         cols_to_keep.append('Rationale')
     recs = recs[cols_to_keep]
     recs = recs.rename(columns={'comment-body': 'Recommendation'})
-
     recs["neutral/pass"] = unique_authors_count - recs["agrees"] - recs["disagrees"]
-    recs["approval"] = (recs["agrees"]/unique_authors_count)*100
-    recs["majority"] = recs['approval'].apply(lambda x: "✅" if x >= 75 else "❌")
+    if pass_criteria == 'Include':
+        recs["approval"] = (recs["agrees"]/unique_authors_count)*100
+    else: 
+        recs["approval"] = (recs["agrees"]/(recs['agrees']+recs['disagrees']))*100
+    
+    recs["majority"] = recs['approval'].apply(lambda x: "✅" if x >= majority_threshold else "❌")
     if 'Rec #' in recs.columns:
         recs['Rec #'] = recs['Rec #'].round().astype(int).astype(str)
     return recs
@@ -79,7 +93,7 @@ def main_page():
     recs = data_load(st.session_state.recs)
     # rationales = data_load(st.session_state.rationales)
     if recs is not None:
-        recs = recs_clean(recs)
+        recs = recs_clean(recs, passes, majority)
         # if rationales is not None:
         #     recs = rationales_merge(recs,rationales)
         recs = sort_recommendations(recs, chosen)
@@ -95,23 +109,22 @@ def main_page():
         if 'Rec #' in recs_formatted.columns:
             recs_formatted['Rec #'] = recs_formatted['Rec #'].round()
 
-        def highlight_row(row):
+        def highlight_row(row, majority_threshold):
             try:
                 # Remove the percentage sign and convert to float
                 value = float(row['% Approval'].strip('%'))
                 # Apply background color to the entire row based on the value
-                if value >= 75:
+                if value >= majority_threshold:
                     return ['background-color: lightgreen' for _ in row]
                 elif value >= 50:
                     return ['background-color: #DBF9DB' for _ in row]
                 
-                return ['background-color: lightgreen' if value >= 75 else 'background-color: #DBF9DB' if 50 <= value < 75 else '' for _ in row]
+                return ['background-color: lightgreen' if value >= majority_threshold else 'background-color: #DBF9DB' if 50 <= value < majority_threshold else '' for _ in row]
             except ValueError:
                 return ['' for _ in row]
 
         
-        styled_recs = recs_formatted.style.apply(highlight_row, axis=1) \
-                                .set_properties(**{
+        styled_recs = recs_formatted.style.apply(highlight_row, axis=1, majority_threshold=majority).set_properties(**{
                                     'white-space': 'pre-wrap',  # Allows text to wrap
                                     'word-wrap': 'break-word',  # Breaks long words
                                 })
@@ -134,7 +147,7 @@ def details_page():
     recs = data_load(st.session_state.recs)
     rationales = data_load(st.session_state.rationales)
     if recs is not None:
-        recs = recs_clean(recs)
+        recs = recs_clean(recs, passes, majority)
         if rationales is not None:
             recs = rationales_merge(recs,rationales)
         recs = sort_recommendations(recs, chosen)
