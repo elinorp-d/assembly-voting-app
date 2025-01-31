@@ -48,7 +48,7 @@ with st.sidebar:
             
 @st.cache_data
 def recs_clean(recs, pass_criteria, majority_threshold):
-    unique_authors_count = recs["author-id"].nunique() -1
+    unique_authors_count = 18
     st.write(f"Number of participants who voted: {unique_authors_count}")
     recs = recs[recs["moderated"]==1]
     cols_to_keep = ["comment-body","agrees","disagrees"]
@@ -89,7 +89,7 @@ def sort_recommendations(merged_df, sort_criteria):
 
     
 def main_page():
-    st.title("2025 IAP Student Assembly Voting Overall Results Day 2")
+    st.title("2025 IAP Student Assembly Voting Overall Results Day 3")
     recs = data_load(st.session_state.recs)
     # rationales = data_load(st.session_state.rationales)
     if recs is not None:
@@ -97,8 +97,10 @@ def main_page():
         # if rationales is not None:
         #     recs = rationales_merge(recs,rationales)
         recs = sort_recommendations(recs, chosen)
-
-        recs_formatted = recs[['Rec #','Recommendation', 'approval', 'majority']]
+        if 'Rec #' in recs.columns:
+            recs_formatted = recs[['Rec #','Recommendation', 'approval', 'majority']]
+        else: 
+            recs_formatted = recs[['Recommendation', 'approval', 'majority']]
         recs_formatted = recs_formatted.rename(columns={
             'approval': '% Approval',
             'majority': 'Majority?'
@@ -151,6 +153,7 @@ def details_page():
         if rationales is not None:
             recs = rationales_merge(recs,rationales)
         recs = sort_recommendations(recs, chosen)
+        recs.to_csv('results/merged_results.csv')
         for index, row in recs.iterrows():
             container = st.container()
             container.markdown("---")
