@@ -133,6 +133,36 @@ def tsne_2d_embeddings(recs,recommendations_df=None):
         # Create a DataFrame for easy manipulation
         df = pd.DataFrame({'x': x, 'y': y, 'cluster': recs['cluster'], 'suggestion': recs['suggestion'], 'quote': '"' + recs['quote'] + '"'})
         
+        # Ensure the color array matches the length of the DataFrame
+        color = df['cluster'].astype(str)
+        # Define a custom color sequence excluding red and green to ensure distinctness from recs
+        custom_colors = [
+            '#636EFA', # purple
+            '#FF9616', # orange
+            '#19D3F3', # teal
+            '#B6E880', # green pale
+            '#EEA6FB', #lightpink
+            '#FECB52', # pale orange
+            '#511CFB', # dark blue
+            '#00B5F7', # light blue
+            '#C9FBE5', # light mint
+            '#86CE00', #lime green 
+            '#BC7196', # pale purple dark
+            '#7E7DCD', #violet
+            '#FE00CE', #hot pink
+            '#F6F926', #yellow
+            '#FED4C4' # pale peach
+        ]
+        # Plot using Plotly
+        fig = px.scatter(df, x='x', y='y',
+                         color=color,
+                         color_discrete_sequence=custom_colors,  # Add this line
+                         hover_data={'suggestion': True,'quote':True,'x':False,'y':False},
+                         title="Clusters identified visualized in language 2D using t-SNE")
+        
+        fig.update_traces(marker_size=10, marker=dict(line=dict(width=1, color="DarkSlateGrey")))
+        
+        # Add recommendations separately as a new trace
         if recommendations_df is not None and 'embedding' in recommendations_df.columns:
             # Transform the embeddings in recommendations_df using the existing t-SNE transformation
             rec_matrix = np.vstack(recommendations_df['embedding'].values)
@@ -141,34 +171,41 @@ def tsne_2d_embeddings(recs,recommendations_df=None):
             rec_x = [x for x, y in rec_vis_dims2]
             rec_y = [y for x, y in rec_vis_dims2]
 
-            # Add the transformed points to the plot
-            rec_df = pd.DataFrame({'x': rec_x, 'y': rec_y, 'cluster': -1, 'suggestion': recommendations_df['suggestion'], 'quote': '"' + recommendations_df['quote'] + '"'})
+            rec_df = pd.DataFrame({
+                'x': rec_x, 
+                'y': rec_y, 
+                'Rec': recommendations_df['Recommendation'],
+                'Rationale': recommendations_df['Rationale'],
+                'Passed': recommendations_df['majority']
+            })
+            
+            # Create two separate traces for passed and failed recommendations
+            passed_mask = rec_df['Passed'] == '✅'
+            
+            # Trace for passed recommendations
+            passed_trace = px.scatter(
+                rec_df[passed_mask],
+                x='x', y='y',
+                hover_data={'Rec': True, 'Rationale': True, 'Passed': True, 'x': False, 'y': False}
+            ).data[0]
+            passed_trace.marker = dict(symbol='x', size=15, color='green', line=dict(width=2, color="DarkSlateGrey"), opacity=0.8)
+            passed_trace.name = 'passed recs'
+            passed_trace.showlegend = True
+            
+            # Trace for failed recommendations
+            failed_trace = px.scatter(
+                rec_df[~passed_mask],
+                x='x', y='y',
+                hover_data={'Rec': True, 'Rationale': True, 'Passed': True, 'x': False, 'y': False}
+            ).data[0]
+            failed_trace.marker = dict(symbol='cross', size=15, color='red', line=dict(width=2, color="DarkSlateGrey"), opacity=0.8)
+            failed_trace.name = 'failed recs'
+            failed_trace.showlegend = True
+            
+            fig.add_trace(passed_trace)
+            fig.add_trace(failed_trace)
 
-            # Append to the existing DataFrame
-            df = pd.concat([df, rec_df], ignore_index=True)   
-
-        # Ensure the color array matches the length of the DataFrame
-        color = df['cluster'].astype(str)
-        # Plot using Plotly
-        fig = px.scatter(df, x='x', y='y',
-                         color=color,
-                         hover_data={'suggestion': True,'quote':True,'x':False,'y':False},
-                         title="Clusters identified visualized in language 2D using t-SNE")
-
-
-        # Show the plot
-        fig.update_traces(marker_size=10,hoverlabel_font_size=18)  # Increase hover text size
-        # Update the plot with the new points
-        # fig.add_trace(px.scatter(df[df['cluster'] == -1], x='x', y='y',
-        #                             # marker=dict(symbol='star', color='black'),
-        #                             hover_data={'suggestion': True, 'quote': True, 'x': False, 'y': False}).data[0])
-        # Add and customize the trace for cluster -1
-        star_trace = px.scatter(df[df['cluster'] == -1], x='x', y='y',
-                                hover_data={'suggestion': True, 'quote': True, 'x': False, 'y': False}).data[0]
-        fig.add_trace(star_trace)
-        fig.update_traces(marker=dict(symbol='triangle-up', size=15), selector=dict(name='actual recs'))
-        # Update the legend to label the -1 cluster as 'Recommendations'
-        fig.for_each_trace(lambda trace: trace.update(name='actual recs') if trace.name == '-1' else ())
+        fig.update_traces(hoverlabel_font_size=18)  # Increase hover text size
         fig.update_layout(height=600)
         st.plotly_chart(fig)
 
@@ -190,23 +227,103 @@ def tsne_3d_embeddings(recs,recommendations_df=None):
         
         # Create a DataFrame for easy manipulation
         df = pd.DataFrame({'x': x, 'y': y, 'z': z, 'cluster': recs['cluster'], 'suggestion': recs['suggestion'], 'quote': '"' + recs['quote'] + '"'})
+        
+        # Ensure the color array matches the length of the DataFrame
+        color = df['cluster'].astype(str)
+        # Define a custom color sequence excluding red and green
+        custom_colors = [
+            '#636EFA', # purple
+            '#FF9616', # orange
+            '#19D3F3', # teal
+            '#B6E880', # green pale
+            '#EEA6FB', #lightpink
+            '#FECB52', # pale orange
+            '#511CFB', # dark blue
+            '#00B5F7', # light blue
+            '#C9FBE5', # light mint
+            '#86CE00', #lime green 
+            '#BC7196', # pale purple dark
+            '#7E7DCD', #violet
+            '#FE00CE', #hot pink
+            '#F6F926', #yellow
+            '#FED4C4' # pale peach
+        ]
 
         # Plot using Plotly
         fig = px.scatter_3d(df, x='x', y='y', z='z',
-                            color=recs['cluster'].astype(str),
+                            color=color,
+                            color_discrete_sequence=custom_colors,
                             hover_data={'suggestion': True,'quote':True,'cluster': False,'x':False,'y':False,'z':False},
-                            title="Clusters identified visualized in language 3D using t-SNE",
-        )
+                            title="Clusters identified visualized in language 3D using t-SNE")
+
+        fig.update_traces(marker_size=5, marker=dict(line=dict(width=1, color="DarkSlateGrey")))
+
+        # Add recommendations separately as a new trace
+        if recommendations_df is not None and 'embedding' in recommendations_df.columns:
+            # Transform the embeddings in recommendations_df using the existing t-SNE transformation
+            rec_matrix = np.vstack(recommendations_df['embedding'].values)
+            rec_vis_dims3 = tsne.fit_transform(matrix)[:len(rec_matrix)]
+
+            rec_x = [x for x, y, z in rec_vis_dims3]
+            rec_y = [y for x, y, z in rec_vis_dims3]
+            rec_z = [z for x, y, z in rec_vis_dims3]
+
+            rec_df = pd.DataFrame({
+                'x': rec_x,
+                'y': rec_y,
+                'z': rec_z,
+                'Rec': recommendations_df['Recommendation'],
+                'Rationale': recommendations_df['Rationale'],
+                'Passed': recommendations_df['majority']
+            })
+
+            # Create two separate traces for passed and failed recommendations
+            passed_mask = rec_df['Passed'] == '✅'
+
+            # Trace for passed recommendations
+            passed_trace = go.Scatter3d(
+                x=rec_df[passed_mask]['x'],
+                y=rec_df[passed_mask]['y'],
+                z=rec_df[passed_mask]['z'],
+                mode='markers',
+                marker=dict(symbol='x', size=7, color='green', line=dict(width=2, color="DarkSlateGrey"), opacity=0.8),
+                name='passed recs',
+                hovertemplate="<br>".join([
+                    "Rec: %{customdata[0]}",
+                    "Rationale: %{customdata[1]}",
+                    "Passed: %{customdata[2]}"
+                ]),
+                customdata=rec_df[passed_mask][['Rec', 'Rationale', 'Passed']].values
+            )
+
+            # Trace for failed recommendations
+            failed_trace = go.Scatter3d(
+                x=rec_df[~passed_mask]['x'],
+                y=rec_df[~passed_mask]['y'],
+                z=rec_df[~passed_mask]['z'],
+                mode='markers',
+                marker=dict(symbol='cross', size=15, color='red', line=dict(width=2, color="DarkSlateGrey"), opacity=0.8),
+                name='failed recs',
+                hovertemplate="<br>".join([
+                    "Rec: %{customdata[0]}",
+                    "Rationale: %{customdata[1]}",
+                    "Passed: %{customdata[2]}"
+                ]),
+                customdata=rec_df[~passed_mask][['Rec', 'Rationale', 'Passed']].values
+            )
+
+            fig.add_trace(passed_trace)
+            fig.add_trace(failed_trace)
 
         # Show the plot
-        fig.update_traces(marker_size=5, hoverlabel_font_size=18)  # Increase hover text size
+        fig.update_traces(hoverlabel_font_size=18)  # Increase hover text size
         fig.update_layout(height=700, scene_camera=dict(eye=dict(x=0.65, y=0.65, z=0.5)))  # Default zoom set higher
         st.plotly_chart(fig)
         return np.array(x), np.array(y), np.array(z)
     else:
         st.error("Embeddings not found in the dataframe for t-SNE.")
         return None, None, None
-
+    
 def load_suggestions_embeddings():
     if not os.path.exists('results/all_suggestions_categorized_with_embeddings.csv'):
         recs = load_suggestions()
@@ -229,33 +346,31 @@ def main_page():
     st.markdown("We've taken all 600+ suggestions and vectorized them using an embedding model. Then, we use k-means clustering to group suggestions by topic, and they are visualized below using t-SNE.")
     st.markdown("You can drag the sliders to toggle between 2 and 3D and change the number of clusters!")
 
-    col1, col2 = st.columns([0.10, 0.70])
+    col1, col2, col3, _ = st.columns([0.2, 0.2, 0.4, 0.2])
     with col1:
-        dim = st.slider('Plot dimension:', min_value=2, max_value=3, step=1)
+        show_recs = st.toggle('Show recommendations', value=True)
     with col2:
-        k = st.slider('Select number of clusters (k):', min_value=2, max_value=15, value=5, step=1)
+        dim = 3 if st.toggle('Plot in 3D', value=False) else 2
+    with col3:
+        k = st.slider('Select number of clusters (k):', min_value=2, max_value=15, value=5, step=1, label_visibility="collapsed")
+
     # Perform k-means clustering
     recs = k_means_clustering(recs,k)
     
     
-    if not st.button('Show actual recommendations'):
+    recommendations_df = None
+    if show_recs:
         recommendations_df = load_recommendations()
         recommendations_df = format_recommendations(recommendations_df)
-        with st.spinner('t-SNE in progress...'):
-            if dim==3:
-                st.markdown("Hover over the datapoints to see the suggestion and original quote. You can also zoom in/out and rotate the plot.")
-                x,y,z = tsne_3d_embeddings(recs,recommendations_df)
-            else:
-                st.markdown("Hover over the datapoints to see the suggestion and original quote.")
-                x,y = tsne_2d_embeddings(recs,recommendations_df)
-    
+        
     with st.spinner('t-SNE in progress...'):
         if dim==3:
             st.markdown("Hover over the datapoints to see the suggestion and original quote. You can also zoom in/out and rotate the plot.")
-            x,y,z = tsne_3d_embeddings(recs)
+            x,y,z = tsne_3d_embeddings(recs, recommendations_df)
         else:
             st.markdown("Hover over the datapoints to see the suggestion and original quote.")
-            x,y = tsne_2d_embeddings(recs)
+            x,y = tsne_2d_embeddings(recs, recommendations_df)
+
     
     
 def explanation_page():
@@ -305,16 +420,13 @@ def explanation_page():
 
 def format_recommendations(recommendations_df):
     # Rename columns in recommendations_df
-    recommendations_df = recommendations_df.rename(columns={'Recommendation': 'suggestion', 'Rationale': 'quote'})
-    recommendations_df['suggestion'] = recommendations_df.apply(
-        lambda row: f"Recommendation ({row['majority']}): {row['suggestion']} ", axis=1
+    recommendations_df['Recommendation'] = recommendations_df.apply(
+        lambda row: row['Recommendation'][:150]+"..." if len(row['Recommendation'])>150 else row['Recommendation'], axis=1
     )
-    recommendations_df['quote'] = recommendations_df.apply(
-        lambda row: f"Rationale : {row['quote']} ", axis=1
+    recommendations_df['Rationale'] = recommendations_df.apply(
+        lambda row: row['Rationale'][:150]+"..." if len(row['Rationale'])>150 else row['Rationale'], axis=1
     )
-    recommendations_df = recommendations_df[['suggestion','quote','embedding']]
-    # Concatenate the dataframes
-    # concatenated_df = pd.concat([recommendations_df,recs], ignore_index=True)[['suggestion','quote','embedding']]
+    recommendations_df = recommendations_df[['Recommendation','Rationale', 'majority', 'embedding']]
     
     return recommendations_df
 
